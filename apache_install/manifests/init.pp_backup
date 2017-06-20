@@ -1,0 +1,99 @@
+# /etc/puppetlabs/puppet/modules/apache_install/manifests/init.pp
+
+include stdlib
+
+class apache_install () {
+
+include apache_repo::environment_params
+
+file { 'download_httpd-2.4.18.tar.gz':
+  ensure  => present,
+  path    => "$apache_binaries/$apache_sourcefile",
+  source  => "https://archive.apache.org/dist/httpd/$apache_sourcefile",
+  replace => no,
+  owner   => $file_owner,
+  group   => $file_group,
+}
+
+file { 'download_httpd-2.4.18-deps.tar.gz':
+  ensure  => present,
+  path    => "$apache_binaries/$apache_sourcefile_deps",
+  source  => "https://archive.apache.org/dist/httpd/$apache_sourcefile_deps",
+  replace => no,
+}
+
+exec { 'tar -xvzf httpd-2.4.18.tar.gz':
+  cwd     => "$apache_binaries",
+  creates => '/apps/Binaries/httpd-2.4.18',
+  path    => ['/bin','/usr/bin', '/usr/sbin',],
+
+}
+
+exec { 'tar -xvzf httpd-2.4.18-deps.tar.gz':
+  cwd     => "$apache_binaries",
+  creates => '/apps/Binaries/httpd-2.4.18/srclib/apr-util',
+  path    => ['/bin','/usr/bin', '/usr/sbin',],
+
+}
+
+exec { 'configure-apache':
+  command => '/apps/Binaries/httpd-2.4.18/configure --prefix=/apps/apache/apache_test',
+  cwd     => '/apps/Binaries/httpd-2.4.18',
+  creates => '/apps/apache/apache_test/bin/apachectl',
+}
+
+exec { 'do_make':
+  command => 'make',
+  cwd     => '/apps/Binaries/httpd-2.4.18',
+  path    => ['/bin','/usr/bin', '/usr/sbin',],
+  creates => '/apps/apache/apache_test/bin/apachectl',
+
+}
+
+exec { 'do_make_install':
+  command => 'make install',
+  cwd     => '/apps/Binaries/httpd-2.4.18',
+  path    => ['/bin','/usr/bin', '/usr/sbin',],
+  creates => '/apps/apache/apache_test/bin/apachectl',
+
+}
+
+file { '/apps/apache/apache_test/conf/httpd.conf.orig':
+  ensure  => present,
+  source  => "/apps/apache/apache_test/conf/httpd.conf",
+  replace => no,
+}
+
+file { '/apps/apache/apache_test/conf/httpd.conf':
+  ensure => present,
+}->
+file_line { 'replace_listen_port':
+  path    => '/apps/apache/apache_test/conf/httpd.conf',
+  line    => 'Listen 8401',
+  match   => '^Listen 80$',
+  replace => true,
+}
+
+file_line { 'replace_user':
+  path    => '/apps/apache/apache_test/conf/httpd.conf',
+  line    => 'User webadm',
+  match   => '^User daemon$',
+  replace => true,
+}
+
+file_line { 'replace_group':
+  path    => '/apps/apache/apache_test/conf/httpd.conf',
+  line    => 'Group webadm',
+  match   => '^Group daemon$',
+  replace => true,
+}
+
+service { 'apache2':
+  ensure  => running,
+  start   => '/apps/apache/apache_test/bin/apachectl start',
+  stop    => '/apps/apache/apache_test/bin/apachectl stop',
+  pattern => 'httpd',
+}
+}
+include apache_install
+include apache_repo

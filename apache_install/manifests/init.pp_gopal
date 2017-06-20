@@ -1,0 +1,106 @@
+include stdlib
+
+class apache_install (
+$file_owner='webadm',
+$file_group='webadm',
+$apache_binaries='/apps/Binaries',
+$apache_base='/apps/apache',
+$apache_instance='apache_test',
+$apache_sourcefile='httpd-2.4.18.tar.gz',
+$apache_sourcefile_deps='httpd-2.4.18-deps.tar.gz',
+$apache_bindir="/apps/Binaries/httpd-2.4.18",
+$apache_installdir="/apps/apache/apache_test",
+$apache_port=8401,
+$apache_user="webadm",
+$apache_group="webadm") {
+
+#include ::apache_repo
+file { "download_$apache_sourcefile":
+  ensure  => present,
+  path    => "$apache_binaries/$apache_sourcefile",
+  source  => "https://archive.apache.org/dist/httpd/$apache_sourcefile",
+  replace => no,
+  owner   => $file_owner,
+  group   => $file_group,
+}
+
+file { "download_$apache_sourcefile_deps":
+  ensure  => present,
+  path    => "$apache_binaries/$apache_sourcefile_deps",
+  source  => "https://archive.apache.org/dist/httpd/$apache_sourcefile_deps",
+  replace => no,
+}
+
+exec { "tar -xvzf $apache_sourcefile":
+  cwd     => "$apache_binaries",
+  creates => "$apache_bindir",
+  path    => ['/bin','/usr/bin', '/usr/sbin',],
+
+}
+
+exec { "tar -xvzf $apache_sourcefile_deps":
+  cwd     => "$apache_binaries",
+  creates => "$apache_bindir/srclib/apr-util",
+  path    => ['/bin','/usr/bin', '/usr/sbin',],
+
+}
+
+exec { 'configure-apache':
+  command => "$apache_bindir/configure --prefix=$apache_installdir",
+  cwd     => "$apache_bindir",
+  creates => "$apache_installdir/bin/apachectl",
+}
+
+exec { 'do_make':
+  command => 'make',
+  cwd     => "$apache_bindir",
+  path    => ['/bin','/usr/bin', '/usr/sbin',],
+  creates => "$apache_installdir/bin/apachectl",
+}
+
+exec { 'do_make_install':
+  command => 'make install',
+  cwd     => "$apache_bindir",
+  path    => ['/bin','/usr/bin', '/usr/sbin',],
+  creates => "$apache_installdir/bin/apachectl",
+}
+
+file { "$apache_installdir/conf/httpd.conf.orig":
+  ensure  => present,
+  source  => "$apache_installdir/conf/httpd.conf",
+  replace => no,
+}
+
+file { "$apache_installdir/conf/httpd.conf":
+  ensure => present,
+}->
+file_line { "replace_listen_port":
+  path    => "$apache_installdir/conf/httpd.conf",
+  line    => "Listen $apache_port",
+  match   => '^Listen 80$',
+  replace => true,
+}
+
+file_line { "replace_user":
+  path    => "$apache_installdir/conf/httpd.conf",
+  line    => "User $apache_user",
+  match   => '^User daemon$',
+  replace => true,
+}
+
+file_line { "replace_group":
+  path    => "$apache_installdir/conf/httpd.conf",
+  line    => "Group $apache_group",
+  match   => '^Group daemon$',
+  replace => true,
+}
+
+service { "apache2":
+  ensure  => running,
+  start   => "$apache_installdir/bin/apachectl start",
+  stop    => "$apache_installdir/bin/apachectl stop",
+  pattern => 'httpd',
+}
+}
+
+include apache_install
